@@ -1,0 +1,211 @@
+REM Project: Terra Pugna
+REM Created: 5/11/2007 10:02:58 AM
+REM
+REM ***** Main Source File *****
+REM
+
+#constant battlefieldsize = 25
+#constant cratenum = 40
+#constant heavy = 5.0
+
+sync on
+randomize timer()
+Tbm_init(60)
+
+global name as string
+
+titlescreen()
+selectname()
+loadgame()
+
+zoom = 8
+
+do
+
+  Tbm_update()
+
+  `control player
+  if keystate(17) then move object player, .1*Tbm.factor
+  if keystate(31) then move object player, -.1*Tbm.factor
+  if keystate(30) then yrotate object player, object angle y(player) - 2*Tbm.factor
+  if keystate(32) then yrotate object player, object angle y(player) + 2*Tbm.factor
+  
+  px# = object position x(player)
+  pz# = object position z(player)
+
+  `collision
+  for t = 0 to array count(crates())
+  if object collision(player, crates(t))
+    x# = get object collision x()
+    z# = get object collision z()
+    position object player, object position x(player) - x#, 0, object position z(player) - z#
+    position object crates(t), object position x(crates(t)) + x#/heavy, 0, object position z(crates(t)) + z#/heavy
+  endif
+  next t
+  
+  `control intelligent munitions system
+  for t = 0 to array count(IMSs())
+    if IMSs(t)
+      x# = object position x(IMSs(t))
+      z# = object position z(IMSs(t))
+      if abs(px# - x#) + abs(pz# - z#) < 3
+        make_bomb(x#, 0, z#, (px# - x#)/10.0, .1, (pz# - z#)/10.0)
+      endif
+    endif
+  next t
+  
+  `control bombs
+  if array count(bombs())
+    for t = 0 to array count(bombs())
+      dec bombs(t).vy, .01
+      position object bombs(t).object, object position x(bombs(t).object)+bombs(t).vx*Tbm.factor,object position y(bombs(t).object)+bombs(t).vy*Tbm.factor,object position z(bombs(t).object)+bombs(t).vz*Tbm.factor
+    next t
+  endif
+
+  `control camera
+  inc zoom, mousemovez()/100.0
+  position camera object position x(player), zoom, object position z(player)
+  point camera object position x(player), object position y(player), object position z(player)
+  yrotate camera object angle y(player)
+
+  text 0, 0, "FPS: " + str$(Tbm.realfps, 0)
+
+  sync
+loop
+
+function make_bomb(x as float, y as float, z as float, vx as float, vy as float, vz as float)
+
+  array insert at bottom bombs()
+  bombs().object = make_object_sphere(0.1, 5, 5)
+  position object bombs().object, x, y, z
+  color object bombs().object, rgb(0, 255, 0)
+  bombs().vx = vx
+  bombs().vy = vy
+  bombs().vz = vz
+
+endfunction
+
+type bomb
+  object as dword
+  vx as float
+  vy as float
+  vz as float
+endtype
+
+function loadgame()
+
+  dim crates(cratenum) as dword
+  dim IMSs(battlefieldsize+4, 4) as dword
+
+  for t = 0 to cratenum
+    crates(t) = make_object_cube(1)
+    position object crates(t), rnd(battlefieldsize), 0, rnd(battlefieldsize)
+    make object collision box crates(t), -0.5, -0.5, -0.5, 0.5, 0.5, 0.5, 0
+    yrotate object crates(t), rnd(50)-25
+    color object crates(t), rnd(0x00FFFFFF)
+  next t
+
+  global player as dword
+  player = make_object_sphere(0.5, 12, 12)
+  make object collision box player, -0.25, -0.25, -0.25, 0.25, 0.25, 0.25, 0
+  color object player, 0x000000FF
+  null = make vector3(1)
+  
+  for t = -2 to battlefieldsize + 2 step 4
+    for side = 0 to 3
+      IMSs(t+2, side) = make_object_cone(.8)
+    next side
+    position object IMSs(t+2, 0), t, 0, -2
+    position object IMSs(t+2, 1), t, 0, battlefieldsize+2
+    position object IMSs(t+2, 2), -2, 0, t
+    position object IMSs(t+2, 3), battlefieldsize+2, 0, t
+  next t
+  
+  dim bombs(-1) as bomb
+
+endfunction
+
+function selectname()
+
+  local how as string
+  local name as string
+  local repea as string
+
+  talk("What's your name, soldier?")
+  input name
+  inc y, 15
+  talk("Ok, " + name + ", you've been chosen to lead this group of soldiers into")
+  talk("a surprise attack on the ShiWii.")
+  talk("Would you like me to tell you how to fight them?")
+  input how
+  inc y, 15
+  if upper$(mid$(how, 1)) = "Y"
+    repeat
+      talk("Use WASD to move around and the left mouse button to fire.")
+      talk("Don't leave the battlefield or else the IMS network will blow you up.")
+      talk("You can hide behind crates for cover but remember the ShiWii can blow them up.")
+      talk("Do you want me to repeat the directions?")
+      input repea
+      inc y, 15
+      if upper$(mid$(repea, 1)) = "N"
+        talk("Ah, you're a quick learner.")
+        talk("We need smart people on the force out there like you.")
+      else
+        talk("Smart choice, war is life or death, so I'll explain it again so you're sure")
+        talk("you can beat the ShiWii.")
+      endif
+    until upper$(mid$(repea, 1)) = "N"
+  else
+    talk("You must be very experienced if you already know that much")
+    talk("about battling on ShiWii territory!")
+  endif
+  talk("Good luck, " + name + "!")
+
+endfunction
+
+function titlescreen()
+
+local title as string
+local piece as string
+local char as byte
+local fade as byte
+
+title = "Terra Pugna"
+
+for char = 1 to len(title)
+  cls
+  piece = left$(title, char)
+  center text screen width()/2, screen height()/2, piece
+  wait 200
+  sync
+next char
+wait 700
+
+titley = screen height()/2
+repeat
+  cls
+  center text screen width()/2, titley, title
+  inc titley
+  wait 7
+  sync
+until titley > screen height()
+
+endfunction
+
+global x as dword
+global y as dword
+
+function talk(str as string)
+
+  x = 0
+
+  for t = 1 to len(str)
+    set cursor x, y
+    print mid$(str, t)
+    inc x, text width(mid$(str, t))
+    wait 50
+    sync
+  next t
+  inc y, 10
+
+endfunction
